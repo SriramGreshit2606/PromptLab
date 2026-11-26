@@ -1,34 +1,34 @@
 
 from time import perf_counter
 
-from google import genai
-from google.genai import types
+from openai import OpenAI
 
 from app.core.config import settings
 
 
 def generate_response(prompt: str) -> dict:
-    if settings.GEMINI_API_KEY is None:
-        raise RuntimeError("Gemini API key is not configured")
 
-    client = genai.Client(
-        api_key=settings.GEMINI_API_KEY.get_secret_value(),
-        http_options=types.HttpOptions(
-            timeout=60000,
-            retry_options=types.HttpRetryOptions(
-                attempts=2,
-                initial_delay=1.0,
-                max_delay=2.0
-            )
-        )
+    if settings.GROQ_API_KEY is None:
+        raise RuntimeError("Groq API key is not configured")
+
+    client = OpenAI(
+        api_key=settings.GROQ_API_KEY.get_secret_value(),
+        base_url="https://api.groq.com/openai/v1",
+        timeout=60.0,
+        max_retries=1
     )
 
     start_time = perf_counter()
 
     try:
-        response = client.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=prompt
+        response = client.chat.completions.create(
+            model=settings.GROQ_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
         )
 
         latency_ms = round(
@@ -36,40 +36,20 @@ def generate_response(prompt: str) -> dict:
             2
         )
 
-        usage = response.usage_metadata
+        usage = response.usage
 
-        input_tokens = (
-            getattr(usage, "prompt_token_count", 0) or 0
+        input_tokens = usage.prompt_tokens if usage else 0
+        output_tokens = usage.completion_tokens if usage else 0
+        total_tokens = usage.total_tokens if usage else (
+            input_tokens + output_tokens
         )
 
-        output_tokens = (
-            getattr(usage, "candidates_token_count", 0) or 0
+        ai_response = (
+            response.choices[0].message.content or ""
         )
-
-        # Preserve Gemini's total, including additional token categories.
-        # Use a calculated fallback only if Gemini does not provide it.
-        total_tokens = getattr(
-            usage, "total_token_count", None
-        )
-
-        if total_tokens is None:
-            thoughts_tokens = (
-                getattr(usage, "thoughts_token_count", 0) or 0
-            )
-
-            tool_tokens = (
-                getattr(usage, "tool_use_prompt_token_count", 0) or 0
-            )
-
-            total_tokens = (
-                input_tokens
-                + output_tokens
-                + thoughts_tokens
-                + tool_tokens
-            )
 
         return {
-            "response": response.text or "",
+            "response": ai_response,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "total_tokens": total_tokens,
