@@ -54,6 +54,43 @@ class TestResult(Base):
         nullable=False
     )
 
+    # Individual AI Judge criteria
+    correctness: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False
+    )
+
+    relevance: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False
+    )
+
+    completeness: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False
+    )
+
+    clarity: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False
+    )
+
+    instruction_following: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False
+    )
+
+    evaluation_reason: Mapped[str] = mapped_column(
+        Text,
+        default="",
+        nullable=False
+    )
+
     input_tokens: Mapped[int] = mapped_column(
         Integer,
         default=0,

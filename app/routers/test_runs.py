@@ -1,6 +1,5 @@
 
 import logging
-from difflib import SequenceMatcher
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -19,6 +18,7 @@ from app.models.test_result import TestResult
 from app.schemas.test_run import TestRunCreate, TestRunResponse
 from app.schemas.test_result import TestResultResponse
 from app.services.gemini_service import generate_response
+from app.services.evaluation_service import evaluate_response
 
 
 logger = logging.getLogger(__name__)
@@ -27,16 +27,6 @@ router = APIRouter(
     prefix="/test-runs",
     tags=["Test Runs"]
 )
-
-
-def calculate_score(ai_response: str, expected_output: str) -> float:
-    actual = " ".join(ai_response.lower().split())
-    expected = " ".join(expected_output.lower().split())
-
-    return round(
-        SequenceMatcher(None, actual, expected).ratio() * 100,
-        2
-    )
 
 
 # CREATE TEST RUN
@@ -136,25 +126,49 @@ def create_test_run(
 
     try:
         for case in cases:
+
             full_prompt = (
                 f"{prompt_version.content}\n\n"
                 f"User input:\n{case.input_text}"
             )
 
+            # Generate AI response
             ai_result = generate_response(full_prompt)
 
-            score = calculate_score(
-                ai_result["response"],
-                case.expected_output
+            # Evaluate response using AI Judge
+            evaluation = evaluate_response(
+                question=case.input_text,
+                expected_answer=case.expected_output,
+                actual_answer=ai_result["response"]
             )
 
+            score = evaluation["score"]
+            criteria = evaluation["criteria"]
+
+            # Save detailed AI Judge results
             result = TestResult(
                 test_run_id=run_id,
                 dataset_case_id=case.id,
                 input_text=case.input_text,
                 ai_response=ai_result["response"],
                 expected_output=case.expected_output,
+
+                # Final weighted score
                 score=score,
+
+                # Individual evaluation scores
+                correctness=criteria["correctness"],
+                relevance=criteria["relevance"],
+                completeness=criteria["completeness"],
+                clarity=criteria["clarity"],
+                instruction_following=criteria[
+                    "instruction_following"
+                ],
+
+                # AI Judge explanation
+                evaluation_reason=evaluation["reason"],
+
+                # Token usage and latency
                 input_tokens=ai_result["input_tokens"],
                 output_tokens=ai_result["output_tokens"],
                 total_tokens=ai_result["total_tokens"],
