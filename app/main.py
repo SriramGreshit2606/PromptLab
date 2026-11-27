@@ -1,11 +1,16 @@
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
+from app.database.base import Base
 from app.database.connection import engine
+import app.models
+
 from app.routers import (
     auth,
     projects,
@@ -20,10 +25,18 @@ from app.routers import (
 )
 
 
+# DATABASE INITIALIZATION
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="Prompt Engineering and Testing Toolkit",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 
@@ -41,7 +54,6 @@ app.add_middleware(
 
 
 # REGISTER API ROUTERS
-
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(projects.router, prefix="/api/v1")
 app.include_router(prompts.router, prefix="/api/v1")
